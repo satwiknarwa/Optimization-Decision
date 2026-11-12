@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shipment Route Optimizer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="topbar">
+            <div>
+                <h1 class="brand-title">Shipment Route Optimizer</h1>
+                <p class="topbar-sub">Evaluate candidate routes across cost, expected transit time, and risk under budget and deadline constraints</p>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="workspace-grid">
+                <div class="map-card">
+                    <div class="map-route-overlay">
+                        <div class="overlay-row">
+                            <div>
+                                <span class="overlay-tag" id="overlayModeTag">RECOMMENDED ROUTE (RANK #1)</span>
+                                <h2 id="mapVesselName">Loading route...</h2>
+                                <p id="mapCorridorText" class="overlay-corridor">Select a shipment corridor to evaluate candidate routes.</p>
+                            </div>
+                            <div class="overlay-badge-group">
+                                <span id="mapBudgetBadge" class="badge-safe">Within Budget</span>
+                                <span id="mapDeadlineBadge" class="badge-safe">Meets Deadline</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="trackingMap" class="leaflet-container"></div>
+                </div>
+
+                <div class="controls-column">
+                    <div class="card">
+                        <h3 class="panel-heading">Shipment Inputs</h3>
+
+                        <div class="control-field">
+                            <label for="corridorSelect">Shipment &amp; Corridor</label>
+                            <select id="corridorSelect" onchange="onCorridorChange()"></select>
+                        </div>
+
+                        <div class="control-row">
+                            <div class="control-field flex-1">
+                                <label for="budgetInput">Max Budget (USD)</label>
+                                <input type="number" id="budgetInput" value="5000" min="500" step="100">
+                            </div>
+                            <div class="control-field flex-1">
+                                <label for="deadlineInput">Max Deadline (Days)</label>
+                                <input type="number" id="deadlineInput" value="35" min="3" step="1">
+                            </div>
+                        </div>
+
+                        <div class="control-field">
+                            <label>Priority</label>
+                            <div class="strategy-btn-grid">
+                                <button type="button" class="strat-btn active" data-strategy="balanced" onclick="selectStrategy('balanced')">Balanced</button>
+                                <button type="button" class="strat-btn" data-strategy="cost_first" onclick="selectStrategy('cost_first')">Minimize Cost</button>
+                                <button type="button" class="strat-btn" data-strategy="speed_first" onclick="selectStrategy('speed_first')">Minimize Time</button>
+                                <button type="button" class="strat-btn" data-strategy="risk_averse" onclick="selectStrategy('risk_averse')">Minimize Risk</button>
+                            </div>
+                            <p id="activeWeightsText" class="weights-readout">Active weights: 40% Cost · 35% Expected Time · 25% Risk</p>
+                        </div>
+
+                        <button type="button" id="optimizeBtn" class="btn-optimize" onclick="runOptimization()">
+                            Evaluate Routes
+                        </button>
+                    </div>
+
+                    <div class="card explanation-card">
+                        <h3 class="decision-heading">Route Explanation</h3>
+                        <p id="decisionText" class="decision-body">Evaluating candidate routes...</p>
+
+                        <ul class="tradeoff-list">
+                            <li id="tradeoffCheapest"></li>
+                            <li id="tradeoffFastest"></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <section class="card table-section">
+                <div class="table-header-row">
+                    <h3 class="panel-heading">Evaluated Route Options</h3>
+                    <span class="table-hint">Click any row to view its route on the map</span>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Route &amp; Carrier</th>
+                                <th>Via Hub</th>
+                                <th>Cost (USD)</th>
+                                <th>Expected Time</th>
+                                <th>Delay Prob</th>
+                                <th>Risk (Cong / Geo)</th>
+                                <th>Score</th>
+                                <th>Constraint Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trackerTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js?v=5"></script>
+</body>
+</html>
