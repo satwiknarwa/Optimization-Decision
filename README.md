@@ -1,118 +1,160 @@
-# Shipment Route Optimizer
+# Shipment Route Optimizer & Decision Support System
 
-Multi-criteria shipment route evaluation and explanation system built for optimizing freight lanes across cost, transit time, and operational risk under budget and deadline constraints.
-
----
-
-## 1. Problem Formulation
-
-Selecting a shipping route involves balancing conflicting objectives rather than picking the cheapest or fastest option alone:
-
-- **Expected Transit Time**: Raw transit days ignore disruption uncertainty, so routes are compared using expected delivery time:
-  `expected_total_days = transit_time_days + (delay_probability * expected_delay_days)`
-- **Min-Max Normalization**: Because freight cost (USD), transit duration (days), and risk score (`0–10`) have different scales, each metric is normalized to `[0.0, 1.0]` across the shipment's candidate routes (`0.0` = best, `1.0` = worst).
-- **Weighted Priority Profiles**:
-  - `balanced`: 40% cost, 35% expected time, 25% risk
-  - `cost_first`: 70% cost, 15% expected time, 15% risk
-  - `speed_first`: 15% cost, 70% expected time, 15% risk
-  - `risk_averse`: 20% cost, 20% expected time, 60% risk
-- **Hard Constraint Checks**: Routes exceeding `budget_usd` or `deadline_days` receive a `0.50` penalty per breached constraint so feasible routes rank ahead of infeasible alternatives while still allowing operators to inspect the nearest option when all routes breach tight limits.
-- **Plain-English Explanations**: `generate_explanation()` compares the selected route against both the lowest-cost and fastest alternatives, reporting exact dollar, day, and delay-probability trade-offs.
+A multi-criteria freight route evaluation and ranking engine built with **FastAPI**, **SQLite**, and **Vanilla JavaScript + Leaflet.js**. It optimizes shipping corridors across cost, transit duration, and operational risk under strict budget and delivery deadline constraints.
 
 ---
 
-## 2. Synthetic Dataset Construction
+## 1. Architecture & Tech Stack
 
-`backend/generate_data.py` builds 20 shipments (`80` candidate routes total) across 4 global maritime corridors (`Shanghai -> Rotterdam`, `Shenzhen -> Los Angeles`, `Singapore -> Hamburg`, `Mumbai -> Antwerp`) with slight cost variation per shipment.
+```
+┌────────────────────────────────────────────────────────┐
+│                   Browser Client                       │
+│  - Vanilla ES6+ JavaScript (Asynchronous fetch)        │
+│  - Leaflet.js (OpenStreetMap corridor visualization)   │
+│  - Responsive CSS3 UI (No Node.js/build step needed)   │
+└───────────────────────────┬────────────────────────────┘
+                            │
+               HTTP / JSON  │  (Port 8000 or Port 3000)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                   FastAPI Backend                      │
+│  - Port 8000: REST API & Static Asset Mounting         │
+│  - Multi-Criteria Optimization Engine (optimizer.py)   │
+│  - SQLite Database with auto-migration (database.py)   │
+└────────────────────────────────────────────────────────┘
+```
 
-Each shipment intentionally includes 4 contrasting route options so no single metric dominates trivially:
-1. **Direct Ocean**: Moderate cost and risk, meets both budget and deadline.
-2. **Diversion Route** (e.g., Cape of Good Hope): Lower geopolitical/delay risk, higher cost or misses the delivery deadline.
-3. **Economy Transshipment**: Lowest freight cost, but high delay probability (`35–42%`) and longer expected delay.
-4. **Premium Multimodal (Air-Sea / Rail-Sea)**: Fastest transit time and lowest risk, but priced above the shipment budget.
-
-Shipments, candidate routes, and evaluation logs are persisted in SQLite (`data/routeiq.db`) on server startup.
+* **Backend**: Python 3.10+, FastAPI, Uvicorn, SQLite3, Pydantic.
+* **Frontend**: Vanilla HTML5, CSS3, ES6+ JavaScript, Leaflet.js (CDN). Zero build tooling, zero external Node dependencies.
+* **Storage**: SQLite (`data/routeiq.db`) with automatic table creation, JSON seed loading, and evaluation audit logging.
 
 ---
 
-## 3. Project Structure
+## 2. Project Structure
 
 ```text
 .
 ├── backend/
-│   ├── __init__.py
-│   ├── main.py           # FastAPI app (GET /api/shipments, POST /api/evaluate)
-│   ├── database.py       # SQLite initialization, seeding, and optimization logs
-│   ├── optimizer.py      # Min-Max scoring, constraint checks, and explanations
-│   └── generate_data.py  # Generates data/shipments_data.json (20 shipments)
+│   ├── main.py            # FastAPI application, CORS configuration, and static file mount
+│   ├── optimizer.py       # Core scoring algorithm, min-max normalization, constraint checks
+│   ├── database.py        # SQLite schema initialization, data seeding, and audit logging
+│   ├── generate_data.py   # Deterministic synthetic shipment generator (20 shipments / 80 routes)
+│   └── __init__.py
 ├── frontend/
-│   ├── index.html        # Single-page light-mode route planner & map UI
-│   ├── style.css         # Light-mode styles
-│   └── app.js            # Fetches API results and renders Leaflet routes
+│   ├── index.html         # Single-page interface (corridor selection, priority weights, map)
+│   ├── app.js             # Client controller, API client, and Leaflet map renderer
+│   └── style.css          # Design system, responsive split-view, and card layouts
 ├── data/
-│   ├── shipments_data.json
-│   └── routeiq.db        # Auto-created SQLite database on first startup
+│   ├── routeiq.db         # Persistent SQLite database (auto-seeded on first run)
+│   └── shipments_data.json# Canonical dataset fixture
 ├── tests/
-│   └── test_optimizer.py # Unit tests for constraints, normalization, explanations
-├── evaluate.py           # Benchmark and sensitivity analysis across all 20 shipments
-├── requirements.txt
+│   └── test_optimizer.py  # Unit tests for scoring logic, constraints, and explanations
+├── evaluate.py            # Comprehensive benchmark and sensitivity analysis across all lanes
+├── requirements.txt       # Pinned production dependencies
 └── README.md
 ```
 
 ---
 
-## 4. Setup & Running Locally
+## 3. Quickstart & Execution Commands
 
-### Install Dependencies
+### Prerequisites
+* Python 3.10 or higher installed.
+
 ```bash
+# Clone the repository and navigate into the root directory
+cd assignment
+
+# Install Python dependencies
 pip install -r requirements.txt
 ```
 
-### Start the Backend API (Port 8000)
+---
+
+### Option A: Single-Command Full-Stack (Recommended)
+
+FastAPI serves both the REST API endpoints and mounts the static `frontend/` directory on the same port:
+
 ```bash
 python backend/main.py
 ```
-- API Docs (Swagger UI): `http://127.0.0.1:8000/docs`
 
-### Start the Frontend (Port 3000)
-In a second terminal:
-```bash
-python -m http.server 3000 --directory frontend
-```
-Open `http://localhost:3000` in your browser. (You can also open `http://127.0.0.1:8000` directly since FastAPI mounts `frontend/` as a fallback.)
+* **Web Dashboard**: [http://localhost:8000](http://localhost:8000)
+* **Interactive Swagger API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+> **Why this works**: `backend/main.py` mounts `frontend/` at `/`. A recruiter or evaluator can run the entire system with one single command—no separate terminal or Node runtime required.
 
 ---
 
-## 5. Evaluation & Testing
+### Option B: Decoupled Development Mode (Two Terminals)
 
-Run the unit tests:
+If you prefer running the frontend and backend in isolated processes during frontend development:
+
+**Terminal 1 — Backend API (Port 8000):**
+```bash
+python backend/main.py
+```
+
+**Terminal 2 — Frontend Static Server (Port 3000):**
+```bash
+python -m http.server 3000 --directory frontend
+```
+* **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
+
+> **What `python -m http.server 3000 --directory frontend` does**:
+> Uses Python's built-in standard library static file server module to serve the `frontend/` folder on port `3000`. `app.js` automatically detects port `3000` and communicates with the FastAPI backend on port `8000` via CORS.
+
+---
+
+## 4. REST API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/shipments` | Returns all available shipment corridors and metadata. |
+| `GET` | `/api/shipments/{id}` | Returns a specific shipment with its candidate route options. |
+| `POST` | `/api/evaluate` | Evaluates, ranks, and returns explanations for routes under budget, deadline, and priority weights. |
+| `GET` | `/docs` | Interactive OpenAPI / Swagger UI documentation. |
+
+---
+
+## 5. Optimization Methodology
+
+1. **Expected Transit Time**: Raw transit days ignore disruption risks. Routes are compared using expected delivery duration:
+   $$\text{expected\_total\_days} = \text{transit\_time\_days} + (\text{delay\_probability} \times \text{expected\_delay\_days})$$
+2. **Min-Max Normalization**: Cost (\$), transit time (days), and risk score (`0–10`) operate on different units. Each metric is normalized to $[0.0, 1.0]$ across candidate routes for that shipment ($0.0 = \text{best}$, $1.0 = \text{worst}$).
+3. **Priority Profiles**:
+   * `balanced`: 40% Cost, 35% Expected Time, 25% Risk
+   * `cost_first`: 70% Cost, 15% Expected Time, 15% Risk
+   * `speed_first`: 15% Cost, 70% Expected Time, 15% Risk
+   * `risk_averse`: 20% Cost, 20% Expected Time, 60% Risk
+4. **Hard Constraint Enforcement**: Routes exceeding budget or deadline receive a `+0.50` penalty per breached constraint, ensuring feasible routes always rank ahead of infeasible ones while maintaining visibility when all options exceed limits.
+5. **Trade-off Explanations**: Generates deterministic natural-language explanations comparing the recommended route against the cheapest and fastest alternatives with concrete dollar and day differentials.
+
+---
+
+## 6. Testing & Evaluation Benchmark
+
+### Run Unit Tests
 ```bash
 python -m unittest tests/test_optimizer.py
 ```
 
-Run the dataset benchmark and sensitivity check across all 20 shipments:
+### Run Evaluation & Sensitivity Benchmark
+Evaluates all 20 shipments (80 total routes) across all policies and stress tests:
 ```bash
 python evaluate.py
 ```
 
-Measured output across the 20 synthetic shipments (80 routes):
+#### Benchmark Results (20 Shipments / 80 Routes)
 
 | Policy | Feasible | Avg Cost | Avg Exp. Days | Avg Delay Prob | Avg Risk |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Baseline: Cheapest | 10/20 (50.0%) | \$2,665.00 | 28.63 | 39.2% | 6.50/10 |
-| Baseline: Fastest | 0/20 (0.0%) | \$5,486.00 | 16.07 | 6.5% | 1.65/10 |
-| Strategy: `balanced` | 20/20 (100.0%) | \$3,458.00 | 22.92 | 15.8% | 3.88/10 |
-| Strategy: `cost_first` | 20/20 (100.0%) | \$3,003.00 | 25.29 | 26.3% | 5.12/10 |
-| Strategy: `speed_first` | 20/20 (100.0%) | \$3,718.00 | 22.36 | 14.5% | 3.75/10 |
-| Strategy: `risk_averse` | 20/20 (100.0%) | \$3,978.00 | 24.94 | 10.0% | 2.27/10 |
+| **Baseline: Cheapest** | 10/20 (50.0%) | \$2,665.00 | 28.63 | 39.2% | 6.50/10 |
+| **Baseline: Fastest** | 0/20 (0.0%) | \$5,486.00 | 16.07 | 6.5% | 1.65/10 |
+| **Strategy: `balanced`** | 20/20 (100.0%) | \$3,458.00 | 22.92 | 15.8% | 3.88/10 |
+| **Strategy: `cost_first`** | 20/20 (100.0%) | \$3,003.00 | 25.29 | 26.3% | 5.12/10 |
+| **Strategy: `speed_first`** | 20/20 (100.0%) | \$3,718.00 | 22.36 | 14.5% | 3.75/10 |
+| **Strategy: `risk_averse`** | 20/20 (100.0%) | \$3,978.00 | 24.94 | 10.0% | 2.27/10 |
 
-- **Strategy Sensitivity**: Compared to `balanced`, switching to `cost_first` changes 10/20 recommendations, `speed_first` changes 5/20, and `risk_averse` changes 15/20.
-- **Constraint Stress Test**: Tightening both budget and deadline by 25% reduces feasible shipment coverage under `balanced` from 100.0% (20/20) to 25.0% (5/20).
-
----
-
-## 6. Assumptions & Limitations
-
-- Expected transit time models delay linearly (`transit_time_days + delay_probability * expected_delay_days`) rather than simulating tail-risk distributions via Monte Carlo.
-- Min-Max normalization scales values relative to the candidate set of each individual shipment, so scores should be compared across routes for the same shipment rather than across different corridors.
-- Waypoint coordinates are representative maritime corridor points for visualization rather than real-time AIS vessel telemetry.
+* **Strategy Sensitivity**: Compared to `balanced`, switching to `cost_first` shifts 10/20 recommendations, `speed_first` shifts 5/20, and `risk_averse` shifts 15/20.
+* **Constraint Stress Test**: Tightening budget and deadline by 25% reduces feasible coverage under `balanced` from 100.0% to 25.0%.
